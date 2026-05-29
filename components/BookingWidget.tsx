@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  BOOKING_API_BASE,
   BOOKING_ENDPOINT,
   CLOSING_HOUR,
   OPENING_HOUR,
+  PAYMENT_INFO,
   ROOMS,
   ROOM_LIST,
   formatHour,
@@ -12,7 +14,7 @@ import {
   type RoomId,
 } from "@/lib/config";
 
-type Step = "room" | "date" | "time" | "form" | "done" | "error";
+type Step = "room" | "date" | "time" | "form" | "payment" | "done" | "error";
 
 function todayVN(): string {
   const now = new Date();
@@ -38,6 +40,7 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "date", label: "Ngày" },
   { id: "time", label: "Giờ" },
   { id: "form", label: "Thông tin" },
+  { id: "payment", label: "Thanh toán" },
   { id: "done", label: "Xác nhận" },
 ];
 
@@ -55,6 +58,7 @@ export function BookingWidget() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [payment, setPayment] = useState<{ code: string; amount: number } | null>(null);
   const [busyHours, setBusyHours] = useState<Set<number>>(new Set());
   const [loadingBusy, setLoadingBusy] = useState(false);
 
@@ -104,25 +108,19 @@ export function BookingWidget() {
     endHour <= CLOSING_HOUR &&
     endHour > startHour &&
     !rangeHasBusy;
-  const validForm = form.customerName.trim() !== "" && form.customerPhone.trim() !== "";
+  const validForm =
+    form.customerName.trim() !== "" &&
+    form.customerPhone.trim() !== "" &&
+    /\S+@\S+\.\S+/.test(form.customerEmail.trim());
 
   async function submit() {
     if (!roomId || !room || !validTime || !validForm) return;
 
-    if (!BOOKING_ENDPOINT) {
-      setResult({
-        ok: false,
-        message:
-          "Hệ thống đặt phòng đang được cấu hình. Vui lòng liên hệ quán qua hotline 0966 967 016 để đặt phòng trực tiếp.",
-      });
-      setStep("error");
-      return;
-    }
-
     setSubmitting(true);
     try {
-      const res = await fetch(BOOKING_ENDPOINT, {
+      const res = await fetch(`${BOOKING_API_BASE}/api/bookings`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           roomId,
           date,
@@ -135,9 +133,19 @@ export function BookingWidget() {
         }),
       });
       const data = await res.json();
-      setResult(data);
-      setStep(data.ok ? "done" : "error");
-    } catch (e) {
+      if (!res.ok || !data.code) {
+        setResult({
+          ok: false,
+          message:
+            data.error ||
+            "Không tạo được đơn đặt phòng. Vui lòng thử lại hoặc gọi quán 0966 967 016.",
+        });
+        setStep("error");
+        return;
+      }
+      setPayment({ code: data.code, amount: data.amount });
+      setStep("payment");
+    } catch {
       setResult({
         ok: false,
         message:
@@ -156,6 +164,7 @@ export function BookingWidget() {
     setEndHour(OPENING_HOUR + 1);
     setForm({ customerName: "", customerPhone: "", customerEmail: "", note: "" });
     setResult(null);
+    setPayment(null);
   }
 
   return (
@@ -223,6 +232,21 @@ export function BookingWidget() {
               validForm={validForm}
               onBack={() => setStep("time")}
               onSubmit={submit}
+            />
+          )}
+
+          {step === "payment" && room && payment && (
+            <StepPayment
+              amount={payment.amount}
+              code={payment.code}
+              onBack={() => setStep("form")}
+              onConfirmed={() => {
+                setResult({
+                  ok: true,
+                  message: `Cảm ơn bạn! Email xác nhận sẽ được gửi về ${form.customerEmail.trim()} sau khi quán nhận được thanh toán.`,
+                });
+                setStep("done");
+              }}
             />
           )}
 
@@ -679,6 +703,65 @@ function Field({
   );
 }
 
+function PayRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="flex justify-between gap-3 py-1">
+      <span className="text-walnut/70">{label}</span>
+      <span className={strong ? "text-chocolate font-semibold" : "text-walnut"}>{value}</span>
+    </div>
+  );
+}
+
+function StepPayment({
+  amount,
+  code,
+  onConfirmed,
+  onBack,
+}: {
+  amount: number;
+  code: string;
+  onConfirmed: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="text-center py-4">
+      <h3 className="text-chocolate text-xl font-semibold mb-2">Quét mã QR để chuyển khoản</h3>
+      <p className="text-walnut/80 text-sm mb-4">
+        Mở app ngân hàng, quét mã rồi nhập <b>đúng số tiền</b> và <b>nội dung</b> bên dưới.
+      </p>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={PAYMENT_INFO.qrImage}
+        alt="QR chuyển khoản"
+        className="w-60 h-auto mx-auto rounded-xl border border-ochre/30"
+      />
+      <div className="mt-4 max-w-sm mx-auto text-left bg-sand/30 rounded-xl p-4 text-sm">
+        <PayRow label="Ngân hàng" value={PAYMENT_INFO.bankName} />
+        <PayRow label="Chủ TK" value={PAYMENT_INFO.accountName} />
+        <PayRow label="Số tiền" value={formatVND(amount)} strong />
+        <PayRow label="Nội dung CK" value={code} strong />
+      </div>
+      <p className="text-walnut/60 text-xs mt-3 max-w-sm mx-auto">
+        ⚠️ Nhập đúng <b>nội dung {code}</b> và <b>số tiền {formatVND(amount)}</b> để hệ thống tự động xác nhận.
+      </p>
+      <div className="flex justify-between gap-3 mt-6 max-w-sm mx-auto">
+        <button
+          onClick={onBack}
+          className="px-5 py-2.5 rounded-full border border-walnut/30 text-walnut hover:bg-sand/30"
+        >
+          ← Quay lại
+        </button>
+        <button
+          onClick={onConfirmed}
+          className="px-7 py-2.5 rounded-full bg-chocolate text-cream font-medium hover:bg-walnut"
+        >
+          Tôi đã chuyển khoản
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function StepDone({
   roomName,
   date,
@@ -722,10 +805,7 @@ function StepDone({
         {formatHour(startHour)} – {endHour === 24 ? "24:00" : formatHour(endHour)} ({hours} giờ)
       </p>
       <p className="text-chocolate text-lg font-semibold mt-3">{formatVND(total)}</p>
-      {message && <p className="text-walnut/70 text-sm mt-4">{message}</p>}
-      <p className="text-walnut/70 text-sm mt-4">
-        Bạn sẽ nhận email xác nhận trong vài phút. Quán sẽ liên hệ qua SĐT để xác nhận thanh toán.
-      </p>
+      {message && <p className="text-walnut/70 text-sm mt-4 max-w-sm mx-auto">{message}</p>}
       <button
         onClick={onReset}
         className="mt-6 px-5 py-2 rounded-full border border-walnut/30 text-walnut hover:bg-sand/30"

@@ -43,6 +43,16 @@ export const CLOSING_HOUR = 24;
 export const BOOKING_ENDPOINT =
   "https://script.google.com/macros/s/AKfycbzNc4VMLITEqxn3HAaAMEB7iNScTMr4TgkFOtb5__ufY1bIfTSjTk-lv65TRTJwwA4dlQ/exec";
 
+// Booking API (vietqr-worker) — tạo booking + sinh mã nội dung CK, worker đối soát + gửi email.
+export const BOOKING_API_BASE = "https://api.xumxuecoffee.com";
+
+// Thông tin thanh toán hiển thị ở bước QR.
+export const PAYMENT_INFO = {
+  qrImage: "/payment-qr.png", // đặt ảnh QR vào public/payment-qr.png
+  bankName: "VIB — Ngân hàng TMCP Quốc tế Việt Nam",
+  accountName: "TRANG THI PHUONG THAO",
+};
+
 export const CAFE_INFO = {
   name: "Xum Xuê Coffee",
   tagline: "Cà phê & cho thuê phòng họp theo giờ tại Hà Nội",
