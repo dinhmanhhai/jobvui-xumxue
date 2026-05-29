@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   BOOKING_API_BASE,
-  BOOKING_ENDPOINT,
   CLOSING_HOUR,
   OPENING_HOUR,
   PAYMENT_INFO,
@@ -69,12 +68,12 @@ export function BookingWidget() {
   }, []);
 
   useEffect(() => {
-    if (step !== "time" || !roomId || !BOOKING_ENDPOINT) {
+    if (step !== "time" || !roomId) {
       return;
     }
     let cancelled = false;
     setLoadingBusy(true);
-    const url = `${BOOKING_ENDPOINT}?page=busy&room=${roomId}&date=${date}`;
+    const url = `${BOOKING_API_BASE}/api/bookings/busy?roomId=${roomId}&date=${date}`;
     fetch(url)
       .then((r) => r.json())
       .then((d) => {
