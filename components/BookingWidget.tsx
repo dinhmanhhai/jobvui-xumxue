@@ -58,7 +58,7 @@ export function BookingWidget() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
-  const [payment, setPayment] = useState<{ code: string; amount: number } | null>(null);
+  const [payment, setPayment] = useState<{ code: string; amount: number; qrUrl: string } | null>(null);
   const [busyHours, setBusyHours] = useState<Set<number>>(new Set());
   const [loadingBusy, setLoadingBusy] = useState(false);
 
@@ -143,7 +143,7 @@ export function BookingWidget() {
         setStep("error");
         return;
       }
-      setPayment({ code: data.code, amount: data.amount });
+      setPayment({ code: data.code, amount: data.amount, qrUrl: data.qrUrl });
       setStep("payment");
     } catch {
       setResult({
@@ -239,6 +239,7 @@ export function BookingWidget() {
             <StepPayment
               amount={payment.amount}
               code={payment.code}
+              qrUrl={payment.qrUrl}
               onBack={() => setStep("form")}
               onConfirmed={() => {
                 setResult({
@@ -438,9 +439,42 @@ function StepTime({
     return false;
   }
 
+  const [extending, setExtending] = useState(false);
+
+  // Dropdown giờ bắt đầu: set start, bumps end nếu cần, reset trạng thái grid.
   function onStartChange(h: number) {
     setStartHour(h);
     if (endHour <= h) setEndHour(h + 1);
+    setExtending(false);
+  }
+
+  // Grid: chạm 1 = chọn giờ bắt đầu (1 giờ); chạm 2 (giờ sau) = chọn giờ kết thúc.
+  // Chạm bất kỳ lúc đã xong dải = bắt đầu chọn lại (reset dễ).
+  function onGridClick(h: number) {
+    if (busyHours.has(h)) return;
+    if (!extending) {
+      setStartHour(h);
+      setEndHour(h + 1);
+      setExtending(true);
+    } else if (h >= startHour) {
+      let conflict = false;
+      for (let k = startHour; k <= h; k++) {
+        if (busyHours.has(k)) {
+          conflict = true;
+          break;
+        }
+      }
+      if (conflict) {
+        setStartHour(h);
+        setEndHour(h + 1);
+      } else {
+        setEndHour(h + 1);
+        setExtending(false);
+      }
+    } else {
+      setStartHour(h);
+      setEndHour(h + 1);
+    }
   }
 
   return (
@@ -486,7 +520,7 @@ function StepTime({
                 key={h}
                 type="button"
                 disabled={busy}
-                onClick={() => !busy && onStartChange(h)}
+                onClick={() => !busy && onGridClick(h)}
                 className={`${base} ${cls}`}
                 aria-label={`${formatHour(h)} ${busy ? "đã có khách đặt" : "trống"}`}
               >
@@ -525,7 +559,10 @@ function StepTime({
           <span className="text-walnut/80">Giờ kết thúc</span>
           <select
             value={endHour}
-            onChange={(e) => setEndHour(Number(e.target.value))}
+            onChange={(e) => {
+              setEndHour(Number(e.target.value));
+              setExtending(false);
+            }}
             className="px-3 py-2.5 rounded-lg border border-ochre/40 bg-cream focus:outline-none focus:border-caramel text-base"
           >
             {endOptions.map((h) => {
@@ -715,11 +752,13 @@ function PayRow({ label, value, strong = false }: { label: string; value: string
 function StepPayment({
   amount,
   code,
+  qrUrl,
   onConfirmed,
   onBack,
 }: {
   amount: number;
   code: string;
+  qrUrl: string;
   onConfirmed: () => void;
   onBack: () => void;
 }) {
@@ -731,7 +770,7 @@ function StepPayment({
       </p>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={PAYMENT_INFO.qrImage}
+        src={qrUrl}
         alt="QR chuyển khoản"
         className="w-60 h-auto mx-auto rounded-xl border border-ochre/30"
       />
