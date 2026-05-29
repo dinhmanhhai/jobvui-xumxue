@@ -58,7 +58,7 @@ pipeline {
               rm -rf jobvui-lms-infra
               git clone https://$GU:$GP@github.com/dinhmanhhai/jobvui-lms-infra.git
               cd jobvui-lms-infra
-              sed -i "s|tag:.*|tag: ${IMG_TAG}|" charts/xumxue/values.yaml
+              sed -i "s|tag:.*|tag: \"${IMG_TAG}\"|" charts/xumxue/values.yaml
               git config user.email "ci@haidm12.cloud"
               git config user.name "jenkins"
               git commit -am "ci: xumxue ${IMG_TAG}" || echo "no change"
